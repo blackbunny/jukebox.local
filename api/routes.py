@@ -157,6 +157,13 @@ async def toggle_player():
     is_playing = audio_player.toggle_play()
     return {"success": True, "is_playing": is_playing}
 
+@app.post("/player/volume")
+async def set_player_volume(volume: int = Query(..., ge=0, le=100)):
+    """Sets the player volume."""
+    audio_player.set_volume(volume)
+    return {"success": True, "volume": volume}
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket route for real-time queue states synchronization."""

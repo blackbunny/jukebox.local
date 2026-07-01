@@ -11,6 +11,7 @@ class QueueManager:
         self.is_playing = False
         self.progress = 0  # In seconds
         self.duration = 0  # In seconds
+        self.volume = 70  # Default volume level (0-100)
 
     def set_fallback_playlist(self, tracks: list[dict]):
         """Sets the fallback playlist tracks fetched at startup."""
@@ -86,6 +87,11 @@ class QueueManager:
         with self.lock:
             self.is_playing = is_playing
 
+    def set_volume(self, volume: int):
+        """Updates the player volume."""
+        with self.lock:
+            self.volume = volume
+
     def get_state(self) -> dict:
         """Returns the complete serialized state of the queue and player."""
         with self.lock:
@@ -96,4 +102,5 @@ class QueueManager:
                 "progress": self.progress,
                 "duration": self.duration,
                 "fallback_count": len(self.fallback_playlist),
+                "volume": self.volume,
             }

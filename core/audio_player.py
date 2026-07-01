@@ -24,6 +24,7 @@ class MockVLCPlayer:
         self.duration = 0
         self.start_time = 0
         self.paused_elapsed = 0
+        self._volume = 70
 
     def get_state(self):
         if self._state == self.State.Playing:
@@ -60,6 +61,13 @@ class MockVLCPlayer:
             return int(self.paused_elapsed * 1000)
         return 0
 
+    def audio_get_volume(self):
+        return self._volume
+
+    def audio_set_volume(self, volume):
+        self._volume = volume
+        return 0
+
 
 class AudioPlayer:
     def __init__(self, queue_manager, broadcast_callback):
@@ -93,6 +101,13 @@ class AudioPlayer:
             logger.info("Mock player initialized.")
         else:
             self.vlc_state = vlc.State
+
+        # Apply initial volume setting to player and queue manager state
+        initial_volume = self.queue_manager.volume
+        if not self.is_mock:
+            self.player.audio_set_volume(initial_volume)
+        else:
+            self.player.audio_set_volume(initial_volume)
 
     def resolve_stream_url(self, youtube_url: str) -> str | None:
         """Fetches the raw streaming audio URL using yt-dlp."""
@@ -164,6 +179,7 @@ class AudioPlayer:
                         if self.is_mock:
                             self.player.duration = next_track.get("duration") or 180
                             self.player.play()
+                            self.player.audio_set_volume(self.queue_manager.volume)
                             self.queue_manager.set_playing_state(True)
                             logger.info(f"Mocking playback of: {next_track['title']}")
                             self.broadcast_callback()
@@ -176,6 +192,7 @@ class AudioPlayer:
                             media = self.vlc_instance.media_new(stream_url)
                             self.player.set_media(media)
                             self.player.play()
+                            self.player.audio_set_volume(self.queue_manager.volume)
                             self.queue_manager.set_playing_state(True)
                             logger.info(f"Started streaming: {next_track['title']}")
                             self.broadcast_callback()
@@ -185,7 +202,7 @@ class AudioPlayer:
                             self.queue_manager.active_track = None
                             self.queue_manager.set_playing_state(False)
                             self.broadcast_callback()
-
+ 
                 # If playing, keep track of progress and periodically notify clients
                 if state == self.vlc_state.Playing:
                     time_ms = self.player.get_time()
@@ -198,12 +215,12 @@ class AudioPlayer:
                         if now - last_broadcast_time >= 2.0:
                             self.broadcast_callback()
                             last_broadcast_time = now
-
+ 
             except Exception as e:
                 logger.error(f"Error in playback loop: {e}", exc_info=True)
-
+ 
             time.sleep(0.5)
-
+ 
     def toggle_play(self) -> bool:
         """Toggles playback between play and pause. Returns the playing status."""
         state = self.player.get_state()
@@ -214,6 +231,7 @@ class AudioPlayer:
             return False
         elif state == self.vlc_state.Paused:
             self.player.play()
+            self.player.audio_set_volume(self.queue_manager.volume)
             self.queue_manager.set_playing_state(True)
             self.broadcast_callback()
             return True
@@ -221,11 +239,22 @@ class AudioPlayer:
             # Force start if we have a track
             if self.queue_manager.active_track:
                 self.player.play()
+                self.player.audio_set_volume(self.queue_manager.volume)
                 self.queue_manager.set_playing_state(True)
                 self.broadcast_callback()
                 return True
             return False
-
+ 
     def skip(self):
         """Signals the loop thread to skip the current track."""
         self.skip_requested = True
+
+    def set_volume(self, volume: int):
+        """Sets the volume on the VLC player and updates the queue state."""
+        volume = max(0, min(100, volume))
+        if not self.is_mock:
+            self.player.audio_set_volume(volume)
+        else:
+            self.player.audio_set_volume(volume)
+        self.queue_manager.set_volume(volume)
+        self.broadcast_callback()
