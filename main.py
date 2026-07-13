@@ -20,7 +20,19 @@ logger = logging.getLogger("JukeboxMain")
 
 def seed_fallback_playlist():
     """Fetches tracks from the default YouTube playlist URL and seeds the QueueManager. Falls back to search query if failing."""
-    logger.info(f"Fetching default playlist tracks: {settings.DEFAULT_PLAYLIST_URL}")
+    url = settings.DEFAULT_PLAYLIST_URL
+    try:
+        from urllib.parse import urlparse, parse_qs
+        parsed_url = urlparse(url)
+        query_params = parse_qs(parsed_url.query)
+        if 'list' in query_params:
+            playlist_id = query_params['list'][0]
+            url = f"https://www.youtube.com/playlist?list={playlist_id}"
+            logger.info(f"Normalized playlist URL to: {url}")
+    except Exception as parse_err:
+        logger.warning(f"Failed to normalize playlist URL: {parse_err}")
+
+    logger.info(f"Fetching default playlist tracks: {url}")
     ydl_opts = {
         'extract_flat': True,
         'skip_download': True,
@@ -30,16 +42,24 @@ def seed_fallback_playlist():
     tracks = []
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(settings.DEFAULT_PLAYLIST_URL, download=False)
-            if info and 'entries' in info:
-                for entry in info['entries']:
-                    if entry:
-                        tracks.append({
-                            "title": entry.get("title") or "YouTube Track",
-                            "url": f"https://www.youtube.com/watch?v={entry.get('id')}",
-                            "duration": int(entry.get("duration") or 0),
-                            "thumbnail": f"https://img.youtube.com/vi/{entry.get('id')}/mqdefault.jpg",
-                        })
+            info = ydl.extract_info(url, download=False)
+            if info:
+                if 'entries' in info:
+                    for entry in info['entries']:
+                        if entry:
+                            tracks.append({
+                                "title": entry.get("title") or "YouTube Track",
+                                "url": f"https://www.youtube.com/watch?v={entry.get('id')}",
+                                "duration": int(entry.get("duration") or 0),
+                                "thumbnail": f"https://img.youtube.com/vi/{entry.get('id')}/mqdefault.jpg",
+                            })
+                elif info.get("id"):
+                    tracks.append({
+                        "title": info.get("title") or "YouTube Track",
+                        "url": f"https://www.youtube.com/watch?v={info.get('id')}",
+                        "duration": int(info.get("duration") or 0),
+                        "thumbnail": info.get("thumbnail") or f"https://img.youtube.com/vi/{info.get('id')}/mqdefault.jpg",
+                    })
     except Exception as e:
         logger.warning(f"Failed to load fallback playlist via URL: {e}. Trying search fallback...")
 
