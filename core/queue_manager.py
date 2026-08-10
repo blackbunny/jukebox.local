@@ -1,6 +1,8 @@
 import threading
 import uuid
 
+from core.playlist_fetcher import fetch_default_playlist
+
 class QueueManager:
     def __init__(self):
         self.lock = threading.Lock()
@@ -8,6 +10,7 @@ class QueueManager:
         self.queue = []  # List of upcoming user-added tracks
         self.fallback_playlist = []  # Fallback playlist loaded from config
         self.fallback_index = 0
+        self.last_track_source = None  # Track whether last played track was from 'queue' or 'fallback'
         self.is_playing = False
         self.progress = 0  # In seconds
         self.duration = 0  # In seconds
@@ -54,11 +57,49 @@ class QueueManager:
             return False, "Track not found in queue."
 
     def get_next_track(self) -> dict | None:
-        """Pops the next track from the queue or fallback playlist."""
+        """
+        Pops the next track from the queue or fallback playlist.
+        Before starting/restarting the fallback playlist (e.g. after user queue finishes,
+        when default list loops back to index 0, or if fallback list is empty),
+        re-fetches the default playlist from YouTube.
+        """
+        needs_refresh = False
+
         with self.lock:
             if self.queue:
                 self.active_track = self.queue.pop(0)
+                self.last_track_source = "queue"
+                self.progress = 0
+                self.duration = self.active_track.get("duration", 0)
+                return self.active_track
+
+            # User queue is empty. Re-fetch default playlist if:
+            # 1. We just finished user-added queue tracks (last_track_source == "queue")
+            # 2. We reached the end of the fallback playlist (fallback_index >= len(fallback_playlist))
+            # 3. Fallback playlist is empty
+            if (
+                self.last_track_source == "queue"
+                or not self.fallback_playlist
+                or self.fallback_index >= len(self.fallback_playlist)
+            ):
+                needs_refresh = True
+
+        # Fetch playlist outside lock to avoid blocking API requests during network call
+        if needs_refresh:
+            new_tracks = fetch_default_playlist()
+            if new_tracks:
+                with self.lock:
+                    self.fallback_playlist = new_tracks
+                    self.fallback_index = 0
+
+        with self.lock:
+            # Check user queue again in case a new track was added while fetching
+            if self.queue:
+                self.active_track = self.queue.pop(0)
+                self.last_track_source = "queue"
             elif self.fallback_playlist:
+                if self.fallback_index >= len(self.fallback_playlist):
+                    self.fallback_index = 0
                 track = self.fallback_playlist[self.fallback_index]
                 self.fallback_index = (self.fallback_index + 1) % len(self.fallback_playlist)
                 self.active_track = {
@@ -69,6 +110,7 @@ class QueueManager:
                     "added_by_ip": "system",
                     "thumbnail": track.get("thumbnail"),
                 }
+                self.last_track_source = "fallback"
             else:
                 self.active_track = None
 
