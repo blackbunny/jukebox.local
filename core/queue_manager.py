@@ -74,12 +74,10 @@ class QueueManager:
                 return self.active_track
 
             # User queue is empty. Re-fetch default playlist if:
-            # 1. We just finished user-added queue tracks (last_track_source == "queue")
-            # 2. We reached the end of the fallback playlist (fallback_index >= len(fallback_playlist))
-            # 3. Fallback playlist is empty
+            # 1. We reached the end of the fallback playlist (fallback_index >= len(fallback_playlist))
+            # 2. Fallback playlist is empty
             if (
-                self.last_track_source == "queue"
-                or not self.fallback_playlist
+                not self.fallback_playlist
                 or self.fallback_index >= len(self.fallback_playlist)
             ):
                 needs_refresh = True
@@ -90,7 +88,8 @@ class QueueManager:
             if new_tracks:
                 with self.lock:
                     self.fallback_playlist = new_tracks
-                    self.fallback_index = 0
+                    if self.fallback_index >= len(new_tracks):
+                        self.fallback_index = 0
 
         with self.lock:
             # Check user queue again in case a new track was added while fetching
@@ -144,5 +143,7 @@ class QueueManager:
                 "progress": self.progress,
                 "duration": self.duration,
                 "fallback_count": len(self.fallback_playlist),
+                "fallback_playlist": self.fallback_playlist,
+                "fallback_index": self.fallback_index,
                 "volume": self.volume,
             }
