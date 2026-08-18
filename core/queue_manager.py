@@ -1,3 +1,4 @@
+import random
 import threading
 import uuid
 
@@ -17,9 +18,11 @@ class QueueManager:
         self.volume = 70  # Default volume level (0-100)
 
     def set_fallback_playlist(self, tracks: list[dict]):
-        """Sets the fallback playlist tracks fetched at startup."""
+        """Sets the fallback playlist tracks fetched at startup (shuffled)."""
+        shuffled = list(tracks)
+        random.shuffle(shuffled)
         with self.lock:
-            self.fallback_playlist = tracks
+            self.fallback_playlist = shuffled
             self.fallback_index = 0
 
     def add_track(self, title: str, url: str, duration: int, added_by_ip: str, play_next: bool = False, thumbnail: str = None) -> dict:
@@ -86,10 +89,11 @@ class QueueManager:
         if needs_refresh:
             new_tracks = fetch_default_playlist()
             if new_tracks:
+                shuffled = list(new_tracks)
+                random.shuffle(shuffled)
                 with self.lock:
-                    self.fallback_playlist = new_tracks
-                    if self.fallback_index >= len(new_tracks):
-                        self.fallback_index = 0
+                    self.fallback_playlist = shuffled
+                    self.fallback_index = 0
 
         with self.lock:
             # Check user queue again in case a new track was added while fetching
@@ -98,6 +102,7 @@ class QueueManager:
                 self.last_track_source = "queue"
             elif self.fallback_playlist:
                 if self.fallback_index >= len(self.fallback_playlist):
+                    random.shuffle(self.fallback_playlist)
                     self.fallback_index = 0
                 track = self.fallback_playlist[self.fallback_index]
                 self.fallback_index = (self.fallback_index + 1) % len(self.fallback_playlist)

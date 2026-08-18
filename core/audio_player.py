@@ -116,6 +116,7 @@ class AudioPlayer:
             'quiet': True,
             'no_warnings': True,
             'nocheckcertificate': True,
+            'extractor_args': {'youtube': {'player_client': ['android', 'ios']}},
         }
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -187,6 +188,7 @@ class AudioPlayer:
                             stream_url = self.resolve_stream_url(next_track['url'])
                             if not stream_url:
                                 logger.error(f"Skipping track {next_track['title']} due to stream resolution failure.")
+                                time.sleep(1.0)
                                 continue
                             
                             media = self.vlc_instance.media_new(stream_url)
@@ -196,6 +198,7 @@ class AudioPlayer:
                             self.queue_manager.set_playing_state(True)
                             logger.info(f"Started streaming: {next_track['title']}")
                             self.broadcast_callback()
+                            time.sleep(0.5)
                     else:
                         # Reset play state when queue is fully empty
                         if self.queue_manager.active_track is not None:
